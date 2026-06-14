@@ -24,11 +24,11 @@ Référence : un sous-ensemble sûr de **GitHub Flavored Markdown (GFM)**.
 | `` `code` `` | code inline | Oui |
 | `**gras**` | **gras** | Oui |
 | `~~barré~~` | ~~barré~~ | Oui |
-| `__gras__` | **gras** | Non (opt-in) |
-| `*italique*` | *italique* | Non (opt-in) |
-| `_italique_` | *italique* | Non (opt-in) |
+| `__gras__` | **gras** | Oui |
+| `*italique*` | *italique* | Oui |
+| `_italique_` | *italique* | Oui |
 
-L'italique et le gras `__` sont **désactivés par défaut** : ils génèrent trop de faux positifs sur du texte normal (`snake_case`, multiplications `a * b`, mots censurés…). Activez-les dans les préférences si vous en avez besoin.
+Toutes les syntaxes sont **activées par défaut**. L'italique (`*` / `_`) et le gras `__` peuvent produire des faux positifs sur du texte normal (`snake_case`, multiplications `a * b`, mots censurés…) : si ça vous gêne, désactivez-les dans les préférences.
 
 ### Blocs (multi-lignes)
 

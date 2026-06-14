@@ -3,6 +3,7 @@
 ## 0.2.0 — 2026-06-14
 
 ### Nouveautés
+- Toutes les syntaxes activées par défaut (italique `*`/`_` et gras `__` inclus, désactivables)
 - Blocs de code multi-lignes ```` ``` ```` (avec langue optionnelle), rendus en `<pre><code>`
 - Listes à puces (`-`, `*`, `+`) et numérotées (`1.`) rendues en `<ul>`/`<ol>`
 - Task lists `- [ ]` / `- [x]` rendues en cases à cocher Unicode (☐ / ☑)

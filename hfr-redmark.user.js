@@ -105,15 +105,14 @@
     { name: 'quote', label: 'Citation  > texte' }
   ];
 
-  // Defauts : les regles a faible taux de faux positifs sont actives.
-  // L'italique (*texte* / _texte_) et le gras __ sont opt-in car bruyants
-  // (snake_case, multiplications, mots censures, etc.). Les blocs exigent un
-  // contexte multi-ligne (<br>), donc peu de faux positifs : actifs par defaut.
+  // Defauts : toutes les regles actives. L'italique (*texte* / _texte_) et le
+  // gras __ peuvent produire des faux positifs (snake_case, multiplications...) :
+  // ils restent desactivables dans les preferences.
   var DEFAULTS = {
     enabled: true,
     perPostToggle: true,
     rules: {
-      code: true, bold: true, boldu: false, strike: true, italic: false, italicu: false,
+      code: true, bold: true, boldu: true, strike: true, italic: true, italicu: true,
       fence: true, list: true, task: true, quote: true
     }
   };
@@ -579,8 +578,8 @@
         '<div class="sep"></div>' +
         '<div style="font-weight:bold;margin-bottom:4px">Syntaxes en ligne</div>' +
         checkboxes(RULES) +
-        '<div class="muted">Italique et gras __ désactivés par défaut ' +
-          '(faux positifs : snake_case, multiplications...).</div>' +
+        '<div class="muted">Tout est activé. Désactivez l\'italique / gras __ ' +
+          'en cas de faux positifs (snake_case, multiplications...).</div>' +
         '<div class="sep"></div>' +
         '<div style="font-weight:bold;margin-bottom:4px">Blocs</div>' +
         checkboxes(BLOCKS) +

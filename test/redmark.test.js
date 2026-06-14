@@ -17,6 +17,8 @@ global.GM_setValue = function () {};
 
 var rm = require('../hfr-redmark.user.js');
 var document = global.document;
+// Defauts au chargement (capture AVANT tout setPrefs)
+var loadDefaults = JSON.parse(JSON.stringify(rm.getPrefs().rules));
 
 // =========================================================================
 // Helpers
@@ -49,6 +51,11 @@ function eq(label, got, exp) {
 
 var DEFAULT = { code: true, bold: true, boldu: false, strike: true, italic: false, italicu: false };
 var ALL = { code: true, bold: true, boldu: true, strike: true, italic: true, italicu: true };
+
+// Toutes les regles sont actives par defaut
+['code', 'bold', 'boldu', 'strike', 'italic', 'italicu', 'fence', 'list', 'task', 'quote'].forEach(function (k) {
+  eq('defaut ' + k + ' = true', loadDefaults[k], true);
+});
 
 // =========================================================================
 // 1. Moteur inline

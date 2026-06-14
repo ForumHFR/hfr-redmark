@@ -17,16 +17,20 @@ Principe directeur : **chaque nouvelle syntaxe doit pouvoir être désactivée**
 - [x] Sélecteurs DOM vérifiés sur page HFR réelle (citation/signature dans `#para`)
 - [x] Suite de tests sans dépendance + CI (`node test/redmark.test.js`)
 
-## v0.2 — Blocs
+## v0.2 — Blocs (livré)
 
-Le défi : HFR sépare les lignes par `<br>`, pas par `\n`. Le rendu bloc doit
-reconstituer des « lignes logiques » entre les `<br>` du `div#para`.
+Le défi (résolu) : HFR sépare les lignes par `<br>`, pas par `\n`. Le rendu bloc
+reconstitue des « lignes logiques » entre les `<br>` d'un hôte de lignes, en
+excluant citations/code/signatures.
 
-- [ ] Blocs de code multi-lignes ```` ``` ```` (fence) avec langue optionnelle
+- [x] Blocs de code multi-lignes ```` ``` ```` (fence) avec langue optionnelle
+- [x] Listes `- ` / `* ` / `+ ` / `1. ` (à puces et numérotées)
+- [x] Task lists `- [ ]` / `- [x]` (cases à cocher Unicode)
+- [x] Détection conservatrice (contexte multi-lignes requis)
 - [ ] Titres `#`, `##`, `###` (rendus discrets, taille mesurée)
-- [ ] Listes `- ` / `* ` / `1. ` (à puces et numérotées)
 - [ ] Citations Markdown `> ` (distinctes des `[quote]` HFR)
 - [ ] Règle horizontale `---`
+- [ ] Listes imbriquées (indentation)
 - [ ] Aperçu live dans la zone de réponse (textarea) avant envoi
 
 ## v0.3 — GitHub Flavored Markdown

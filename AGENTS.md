@@ -46,12 +46,32 @@ processAll()  → pour chaque table.messagetable
    │
    ▼
 renderPost(para)
+   ├─ processBlocks(para)  (si fence/list activés) — AVANT l'inline
    ├─ TreeWalker SHOW_TEXT sur le para
    ├─ inSkippableContext(): rejette A, CODE, PRE, TABLE (citations), .sig, .cita…
    ├─ pour chaque nœud texte retenu :
    │     maskEscapes() → emitInline() → fragment DOM → replaceChild()
    └─ marque data-redmark="on" + garde l'innerHTML d'origine (__redmarkOrig)
 ```
+
+### Moteur bloc (`processBlocks`)
+
+HFR sépare les lignes par `<br>`, pas par `\n`. Le rendu bloc tourne **avant**
+l'inline (pour que le contenu des fences ne soit pas réinterprété et que l'inline
+s'applique dans les `<li>`).
+
+- **Hôtes de lignes** : `para` + tout descendant contenant un `<br>` direct, sauf
+  s'il est sous une citation/`<table>`/signature/code (`hostExcluded`).
+- `segmentLines(host)` : découpe les enfants directs en lignes (séparateur `<br>`),
+  chaque ligne garde ses nœuds + le `<br>` suivant + son texte concaténé.
+- `processHost` détecte des **runs** : fence (ligne ```` ``` ```` → ligne ```` ``` ````),
+  ou suite de lignes de même type de liste (`listType`). Les ops sont appliquées
+  **de la fin vers le début** pour garder les références valides.
+- `applyOp` construit `<pre><code>` (texte brut joint par `\n`) ou `<ul>/<ol>` de
+  `<li>` (marqueur retiré du 1er nœud texte, task list → `<span class="redmark-check">`
+  ☐/☑). `replaceLines` insère le bloc puis retire les nœuds/`<br>` consommés.
+- **Conservateur** : pas de bloc sans contexte multi-lignes (un `para` sans `<br>`
+  n'est jamais un hôte) → un post d'une ligne « - bof » reste du texte.
 
 ### Moteur inline
 
@@ -104,15 +124,24 @@ tête de fichier, en plus de `CHANGELOG.md`.
 
 ## Tests
 
-`node test/redmark.test.js` (sans dépendance, exécuté en CI via `.github/workflows/test.yml`).
+`npm test` (ou `node test/redmark.test.js`) — **jsdom**, exécuté en CI via
+`.github/workflows/test.yml` (`npm ci` + `npm test`).
 
-Couvre, avec un DOM stub (TextNode/Element/Fragment + parentNode) :
+Le test **requiert le userscript réel** : un hook `module.exports` gardé par
+`typeof module` (inerte dans le navigateur) expose l'API interne (`emitInline`,
+`processBlocks`, `inSkippableContext`, `renderPost`, `setPrefs`…). **Source unique,
+aucune copie** → pas de dérive possible. Avant le `require`, le test pose
+`document`/`NodeFilter`/`GM_*` en globals (jsdom) ; au chargement `processAll`
+tourne sur un DOM vide (no-op).
+
+Couvre :
 1. **moteur inline** — flagship `` `test` ``, protection du code, imbrication,
-   anti-faux-positifs (italique off), échappements, multi-occurrences ;
-2. **`inSkippableContext`** — citations (`<table>`), signatures (`.signature`),
-   liens (`<a>`), code (`<pre>`) ignorés ; corps du message rendu ;
-3. **garde anti-dérive** — chaque regex `RULES`, `SKIP_CLASS` et la version doivent
-   exister à l'identique dans le `.user.js` et le `CHANGELOG.md` (sinon échec).
+   anti-faux-positifs (italique off), échappements ;
+2. **blocs** — fences (langue, multi-lignes, non fermée, échappement HTML),
+   listes (`-`/`*`/`+`/`1.`, frontières, ul→ol), task lists ☐/☑, gating, conservateur ;
+3. **intégration `renderPost`** — blocs+inline composés, fence non touché par l'inline,
+   citation inchangée ;
+4. **`inSkippableContext`** — citations/signatures/liens/code ignorés ;
+5. **cohérence** — `@version` du `.user.js` présent comme `## X.Y.Z` dans `CHANGELOG.md`.
 
-Le moteur et le predicat sont recopiés dans le test (le `.user.js` n'exporte rien) :
-le garde (3) signale toute divergence. Une suite d'intégration jsdom est en roadmap.
+Une fixture HTML synthétique + test d'intégration multi-`<br>` plus poussé restent en roadmap.

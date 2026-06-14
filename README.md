@@ -15,6 +15,10 @@ Les mises à jour sont automatiques via Tampermonkey.
 
 ## Syntaxes supportées
 
+Référence : un sous-ensemble sûr de **GitHub Flavored Markdown (GFM)**.
+
+### En ligne
+
 | Syntaxe | Rendu | Activé par défaut |
 |---|---|---|
 | `` `code` `` | code inline | Oui |
@@ -25,6 +29,17 @@ Les mises à jour sont automatiques via Tampermonkey.
 | `_italique_` | *italique* | Non (opt-in) |
 
 L'italique et le gras `__` sont **désactivés par défaut** : ils génèrent trop de faux positifs sur du texte normal (`snake_case`, multiplications `a * b`, mots censurés…). Activez-les dans les préférences si vous en avez besoin.
+
+### Blocs (multi-lignes)
+
+| Syntaxe | Rendu | Activé par défaut |
+|---|---|---|
+| ```` ```lang ``` … ``` ```` | bloc de code (`<pre>`) | Oui |
+| `- item` / `* item` / `+ item` | liste à puces | Oui |
+| `1. item` | liste numérotée | Oui |
+| `- [ ] tâche` / `- [x] fait` | case à cocher ☐ / ☑ | Oui |
+
+Les blocs ne sont détectés que dans un **contexte multi-lignes** : une ligne unique (un post sans saut de ligne) commençant par `-` ou un nombre n'est jamais transformée. Le contenu d'un bloc de code n'est jamais réinterprété (le `**` y reste littéral).
 
 Échappement : `` \` ``, `\*`, `\_`, `\~`, `\\` permettent d'afficher le caractère littéral.
 

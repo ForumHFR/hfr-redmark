@@ -87,6 +87,76 @@ var pSpan = para('<span class="fontd">emphase</span>');
 eq('span neutre (non skip)', rm.inSkippableContext(pSpan.querySelector('span').firstChild, pSpan), false);
 
 // =========================================================================
+// 4. Blocs (fenced code, listes, task lists) — sur lignes separees par <br>
+// =========================================================================
+var BLOCK = { code: true, bold: true, boldu: false, strike: true, italic: false, italicu: false,
+  fence: true, list: true, task: true };
+function blockHtml(html, rules) {
+  rm.setPrefs({ enabled: true, perPostToggle: false, rules: rules || BLOCK });
+  var p = para(html);
+  rm.processBlocks(p);
+  return p.innerHTML;
+}
+
+// fenced code
+eq('fenced code avec langue', blockHtml('```js<br>const x = 1;<br>```'),
+  '<pre class="redmark redmark-pre"><code class="language-js">const x = 1;</code></pre>');
+eq('fenced code sans langue', blockHtml('```<br>plain<br>```'),
+  '<pre class="redmark redmark-pre"><code>plain</code></pre>');
+eq('fenced code multi-lignes', blockHtml('```<br>a<br>b<br>```'),
+  '<pre class="redmark redmark-pre"><code>a\nb</code></pre>');
+eq('fenced code non ferme = inchange', blockHtml('```<br>a<br>b'), '```<br>a<br>b');
+eq('fenced code echappe le HTML', blockHtml('```html<br>&lt;div&gt;<br>```'),
+  '<pre class="redmark redmark-pre"><code class="language-html">&lt;div&gt;</code></pre>');
+
+// listes non ordonnees
+eq('liste a puces (-)', blockHtml('- un<br>- deux<br>- trois'),
+  '<ul class="redmark redmark-list"><li>un</li><li>deux</li><li>trois</li></ul>');
+eq('liste marqueur *', blockHtml('* x<br>* y'),
+  '<ul class="redmark redmark-list"><li>x</li><li>y</li></ul>');
+eq('liste marqueur +', blockHtml('+ x<br>+ y'),
+  '<ul class="redmark redmark-list"><li>x</li><li>y</li></ul>');
+eq('liste un seul item (avec saut de ligne)', blockHtml('- seul<br>'),
+  '<ul class="redmark redmark-list"><li>seul</li></ul>');
+// Conservateur : une seule ligne sans <br> n'est jamais un bloc (evite de
+// transformer un post entier "- bof" en liste).
+eq('conservateur : ligne unique sans <br> = inchange', blockHtml('- seul'), '- seul');
+eq('liste ordonnee', blockHtml('1. a<br>2. b'),
+  '<ol class="redmark redmark-list"><li>a</li><li>b</li></ol>');
+eq('liste puis texte', blockHtml('- a<br>- b<br>suite'),
+  '<ul class="redmark redmark-list"><li>a</li><li>b</li></ul>suite');
+eq('ul puis ol = deux listes', blockHtml('- a<br>1. b'),
+  '<ul class="redmark redmark-list"><li>a</li></ul><ol class="redmark redmark-list"><li>b</li></ol>');
+eq('pas une liste : tiret sans espace', blockHtml('-pasliste<br>-non'), '-pasliste<br>-non');
+
+// task lists (rendu en symboles Unicode)
+eq('task list cochee/decochee', blockHtml('- [ ] a<br>- [x] b'),
+  '<ul class="redmark redmark-list">' +
+  '<li class="redmark-task"><span class="redmark-check">☐</span> a</li>' +
+  '<li class="redmark-task"><span class="redmark-check">☑</span> b</li></ul>');
+
+// integration renderPost : blocs PUIS inline, composes correctement
+function renderFull(html, rules) {
+  rm.setPrefs({ enabled: true, perPostToggle: false, rules: rules || BLOCK });
+  var p = para(html);
+  rm.renderPost(p);
+  return p.innerHTML;
+}
+eq('integration liste + inline', renderFull('- **a**<br>- b'),
+  '<ul class="redmark redmark-list"><li><strong class="redmark">a</strong></li><li>b</li></ul>');
+eq('integration fence non touche par inline', renderFull('```<br>**reste brut**<br>```'),
+  '<pre class="redmark redmark-pre"><code>**reste brut**</code></pre>');
+var citHtml = '<div class="container"><table class="citation"><tr><td>- a<br>- b</td></tr></table></div>';
+eq('integration citation inchangee', renderFull(citHtml), para(citHtml).innerHTML);
+
+// gating + robustesse
+var noBlocks = { code: true, bold: true, boldu: false, strike: true, italic: false, italicu: false,
+  fence: false, list: false, task: false };
+eq('blocs desactives = inchange', blockHtml('```<br>x<br>```', noBlocks), '```<br>x<br>```');
+eq('fence entoure de texte', blockHtml('avant<br>```<br>code<br>```<br>apres'),
+  'avant<br><pre class="redmark redmark-pre"><code>code</code></pre>apres');
+
+// =========================================================================
 // 3. Coherence version (.user.js <-> CHANGELOG)
 // =========================================================================
 var src = fs.readFileSync(path.join(__dirname, '..', 'hfr-redmark.user.js'), 'utf8');

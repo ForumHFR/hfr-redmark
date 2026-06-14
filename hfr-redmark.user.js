@@ -2,8 +2,8 @@
 // @name         [HFR] RedMark
 // @namespace    https://github.com/ForumHFR/hfr-redmark
 // @icon         https://www.google.com/s2/favicons?sz=64&domain=hardware.fr
-// @version      0.1.0
-// @description  Rendu Markdown dans les posts en lecture sur forum.hardware.fr (code inline, gras, barre...)
+// @version      0.2.0
+// @description  Rendu Markdown dans les posts en lecture sur forum.hardware.fr (code inline/bloc, gras, barre, listes, taches...)
 // @author       xat
 // @match        https://forum.hardware.fr/forum2.php*
 // @match        https://forum.hardware.fr/hfr/*
@@ -21,6 +21,7 @@
 // @license      MIT
 // ==/UserScript==
 // --- Changelog ---
+//   0.2.0 - Blocs : code fence ```, listes (- * + 1.), task lists [ ]/[x] (rendu ligne par ligne entre <br>)
 //   0.1.0 - MVP : rendu inline (code, gras, barre), bascule par post, preferences, parsing DOM safe
 // ---
 
@@ -96,13 +97,24 @@
       re: /_(\S(?:[^_]*?\S)?)_/ }
   ];
 
-  // Defauts : les regles a faible taux de faux positifs sont actives.
-  // L'italique (*texte* / _texte_) et le gras __ sont opt-in car bruyants
-  // (snake_case, multiplications, mots censures, etc.).
+  // Regles bloc-level (rendues ligne par ligne entre les <br>), pour l'UI.
+  var BLOCKS = [
+    { name: 'fence', label: 'Bloc de code  ```' },
+    { name: 'list',  label: 'Listes  -  *  +  1.' },
+    { name: 'task',  label: 'Cases à cocher  - [ ] / - [x]' },
+    { name: 'quote', label: 'Citation  > texte' }
+  ];
+
+  // Defauts : toutes les regles actives. L'italique (*texte* / _texte_) et le
+  // gras __ peuvent produire des faux positifs (snake_case, multiplications...) :
+  // ils restent desactivables dans les preferences.
   var DEFAULTS = {
     enabled: true,
     perPostToggle: true,
-    rules: { code: true, bold: true, boldu: false, strike: true, italic: false, italicu: false }
+    rules: {
+      code: true, bold: true, boldu: true, strike: true, italic: true, italicu: true,
+      fence: true, list: true, task: true, quote: true
+    }
   };
 
   // =====================================================================
@@ -118,10 +130,10 @@
       perPostToggle: prefs.perPostToggle !== false,
       rules: {}
     };
-    for (var i = 0; i < RULES.length; i++) {
-      var k = RULES[i].name;
-      var def = DEFAULTS.rules[k];
-      out.rules[k] = (prefs.rules && typeof prefs.rules[k] === 'boolean') ? prefs.rules[k] : def;
+    var keys = Object.keys(DEFAULTS.rules);
+    for (var i = 0; i < keys.length; i++) {
+      var k = keys[i];
+      out.rules[k] = (prefs.rules && typeof prefs.rules[k] === 'boolean') ? prefs.rules[k] : DEFAULTS.rules[k];
     }
     return out;
   }
@@ -141,6 +153,16 @@
       'background:rgba(127,127,127,.16);padding:.05em .35em;border-radius:4px;' +
       'font-size:.92em;white-space:pre-wrap;}' +
     'del.redmark{opacity:.75;}' +
+    'pre.redmark-pre{font-family:Consolas,"Liberation Mono","Courier New",monospace;' +
+      'background:rgba(127,127,127,.13);border:1px solid rgba(127,127,127,.25);' +
+      'border-radius:5px;padding:8px 11px;margin:6px 0;overflow:auto;font-size:.9em;}' +
+    'pre.redmark-pre code{background:none;padding:0;white-space:pre;}' +
+    'ul.redmark-list,ol.redmark-list{margin:5px 0 5px 4px;padding-left:22px;}' +
+    'ul.redmark-list li,ol.redmark-list li{margin:1px 0;}' +
+    'li.redmark-task{list-style:none;margin-left:-18px;}' +
+    '.redmark-check{display:inline-block;width:1em;}' +
+    'blockquote.redmark-quote{margin:6px 0;padding:2px 12px;border-left:3px solid #b9c2cc;' +
+      'color:#5a6573;background:rgba(127,127,127,.07);}' +
     '.redmark-toggle{display:inline-block;cursor:pointer;font:11px/1.4 monospace;' +
       'padding:0 5px;margin-left:8px;border:1px solid #b9c2cc;border-radius:3px;' +
       'color:#8b97a4;background:transparent;user-select:none;vertical-align:middle;}' +
@@ -229,11 +251,211 @@
     return false;
   }
 
+  // =====================================================================
+  // MOTEUR MARKDOWN (blocs : fenced code)
+  // Sur HFR les lignes sont separees par <br> ; on segmente les noeuds d'un
+  // "hote de lignes" par <br>, on detecte les blocs, on remplace les runs.
+  // =====================================================================
+
+  var reFenceOpen = /^\s*```(\w*)\s*$/;
+  var reFenceClose = /^\s*```\s*$/;
+  var reUL = /^\s*[-*+]\s+\S/;          // puce + espace + contenu
+  var reOL = /^\s*\d+\.\s+\S/;          // numero. + espace + contenu
+  var reStripUL = /^\s*[-*+]\s+/;
+  var reStripOL = /^\s*\d+\.\s+/;
+  var reQuote = /^\s*>/;                // citation Markdown (distincte du [quote] HFR)
+  var reStripQuote = /^\s*>\s?/;
+
+  function listType(text) {
+    if (reOL.test(text)) return 'ol';
+    if (reUL.test(text)) return 'ul';
+    return null;
+  }
+
+  function lineText(nodes) {
+    var t = '';
+    for (var i = 0; i < nodes.length; i++) {
+      var v = nodes[i].textContent;
+      t += (v != null ? v : (nodes[i].nodeValue || ''));
+    }
+    return t;
+  }
+
+  function hasDirectBr(el) {
+    for (var i = 0; i < el.childNodes.length; i++) {
+      var c = el.childNodes[i];
+      if (c.nodeType === 1 && c.tagName === 'BR') return true;
+    }
+    return false;
+  }
+
+  // L'hote (ou un de ses ancetres sous root) est-il un contexte a ignorer ?
+  function hostExcluded(el, root) {
+    for (var n = el; n && n.nodeType === 1 && n !== root; n = n.parentNode) {
+      if (n.tagName === 'TABLE' || SKIP_TAGS[n.tagName]) return true;
+      var cls = n.className;
+      if (typeof cls === 'string' && SKIP_CLASS.test(cls)) return true;
+    }
+    return false;
+  }
+
+  // Elements qui cassent une ligne logique : blocs (p, div, listes, citations...)
+  // et contextes a ignorer (signature...). Ils ne font partie d'aucune ligne
+  // Markdown et coupent les runs (un <p> ne fusionne pas avec ses voisins).
+  var BLOCK_BOUNDARY = { P: 1, DIV: 1, UL: 1, OL: 1, PRE: 1, BLOCKQUOTE: 1, TABLE: 1,
+    HR: 1, FIGURE: 1, H1: 1, H2: 1, H3: 1, H4: 1, H5: 1, H6: 1 };
+  function isBoundaryEl(n) {
+    if (n.nodeType !== 1) return false;
+    if (BLOCK_BOUNDARY[n.tagName]) return true;
+    var cls = n.className;
+    return typeof cls === 'string' && SKIP_CLASS.test(cls);
+  }
+
+  // Segmente les enfants directs de host en lignes (separateur = <br>).
+  // Les elements-frontiere (blocs/skip) sont exclus et inserent une coupure.
+  function segmentLines(host) {
+    var lines = [];
+    var cur = { nodes: [], br: null };
+    var kids = Array.prototype.slice.call(host.childNodes);
+    for (var i = 0; i < kids.length; i++) {
+      var n = kids[i];
+      if (n.nodeType === 1 && n.tagName === 'BR') {
+        cur.br = n; lines.push(cur); cur = { nodes: [], br: null };
+      } else if (isBoundaryEl(n)) {
+        lines.push(cur); cur = { nodes: [], br: null };
+        lines.push({ nodes: [], br: null, boundary: true });
+      } else {
+        cur.nodes.push(n);
+      }
+    }
+    lines.push(cur);
+    for (var j = 0; j < lines.length; j++) lines[j].text = lines[j].boundary ? '\x00' : lineText(lines[j].nodes);
+    return lines;
+  }
+
+  // Remplace les lignes [from..to] (+ leurs <br>) par blockEl.
+  function replaceLines(host, lines, from, to, blockEl) {
+    var anchor = lines[from].nodes[0] || lines[from].br || null;
+    host.insertBefore(blockEl, anchor);
+    for (var i = from; i <= to; i++) {
+      for (var n = 0; n < lines[i].nodes.length; n++) {
+        var nd = lines[i].nodes[n];
+        if (nd.parentNode === host) host.removeChild(nd);
+      }
+      if (lines[i].br && lines[i].br.parentNode === host) host.removeChild(lines[i].br);
+    }
+  }
+
+  function processHost(host) {
+    var rules = prefs.rules;
+    var lines = segmentLines(host);
+    var ops = [];
+    var i = 0;
+    while (i < lines.length) {
+      var open = rules.fence ? reFenceOpen.exec(lines[i].text) : null;
+      if (open) {
+        var j = i + 1;
+        while (j < lines.length && !reFenceClose.test(lines[j].text)) j++;
+        if (j < lines.length) { ops.push({ type: 'fence', from: i, to: j, lang: open[1] }); i = j + 1; continue; }
+      }
+      if (rules.list) {
+        var lt = listType(lines[i].text);
+        if (lt) {
+          var e = i + 1;
+          while (e < lines.length && listType(lines[e].text) === lt) e++;
+          ops.push({ type: 'list', listType: lt, from: i, to: e - 1 });
+          i = e; continue;
+        }
+      }
+      if (rules.quote && reQuote.test(lines[i].text)) {
+        var q = i + 1;
+        while (q < lines.length && reQuote.test(lines[q].text)) q++;
+        ops.push({ type: 'quote', from: i, to: q - 1 });
+        i = q; continue;
+      }
+      i++;
+    }
+    // applique de la fin vers le debut : les index/refs restent valides
+    for (var k = ops.length - 1; k >= 0; k--) applyOp(host, lines, ops[k]);
+  }
+
+  function applyOp(host, lines, op) {
+    if (op.type === 'fence') {
+      var content = [];
+      for (var i = op.from + 1; i < op.to; i++) content.push(lines[i].text);
+      var pre = document.createElement('pre');
+      pre.className = 'redmark redmark-pre';
+      var code = document.createElement('code');
+      if (op.lang) code.className = 'language-' + op.lang;
+      code.appendChild(document.createTextNode(content.join('\n')));
+      pre.appendChild(code);
+      replaceLines(host, lines, op.from, op.to, pre);
+    } else if (op.type === 'list') {
+      var listEl = document.createElement(op.listType === 'ol' ? 'ol' : 'ul');
+      listEl.className = 'redmark redmark-list';
+      var anchor = lines[op.from].nodes[0] || lines[op.from].br || null;
+      host.insertBefore(listEl, anchor);
+      var stripRe = op.listType === 'ol' ? reStripOL : reStripUL;
+      for (var li = op.from; li <= op.to; li++) {
+        var item = document.createElement('li');
+        var nodes = lines[li].nodes;
+        if (nodes.length && nodes[0].nodeType === 3) {
+          nodes[0].nodeValue = nodes[0].nodeValue.replace(stripRe, '');
+          // task list : "[ ] " / "[x] " en tete de l'item
+          if (prefs.rules.task) {
+            var tm = /^\[([ xX])\]\s+/.exec(nodes[0].nodeValue);
+            if (tm) {
+              nodes[0].nodeValue = nodes[0].nodeValue.slice(tm[0].length);
+              item.className = 'redmark-task';
+              var box = document.createElement('span');
+              box.className = 'redmark-check';
+              box.appendChild(document.createTextNode(tm[1] === ' ' ? '☐' : '☑'));
+              item.appendChild(box);
+              item.appendChild(document.createTextNode(' '));
+            }
+          }
+        }
+        for (var m = 0; m < nodes.length; m++) item.appendChild(nodes[m]);
+        listEl.appendChild(item);
+        if (lines[li].br && lines[li].br.parentNode === host) host.removeChild(lines[li].br);
+      }
+    } else if (op.type === 'quote') {
+      var bq = document.createElement('blockquote');
+      bq.className = 'redmark redmark-quote';
+      var qa = lines[op.from].nodes[0] || lines[op.from].br || null;
+      host.insertBefore(bq, qa);
+      for (var q = op.from; q <= op.to; q++) {
+        var qn = lines[q].nodes;
+        if (qn.length && qn[0].nodeType === 3) qn[0].nodeValue = qn[0].nodeValue.replace(reStripQuote, '');
+        for (var p = 0; p < qn.length; p++) bq.appendChild(qn[p]);
+        if (q < op.to) bq.appendChild(document.createElement('br'));
+        if (lines[q].br && lines[q].br.parentNode === host) host.removeChild(lines[q].br);
+      }
+    }
+  }
+
+  function processBlocks(para) {
+    var hosts = [];
+    // Le para n'est un hote direct que s'il porte des lignes (contexte multi-ligne) ;
+    // sinon les vraies lignes sont dans les <p> (structure HFR).
+    if (hasDirectBr(para)) hosts.push(para);
+    // Chaque <p> est une unite de paragraphe HFR : hote meme sans <br> (ligne unique).
+    var ps = para.getElementsByTagName('p');
+    for (var i = 0; i < ps.length; i++) {
+      if (!hostExcluded(ps[i], para)) hosts.push(ps[i]);
+    }
+    for (var h = 0; h < hosts.length; h++) processHost(hosts[h]);
+  }
+
   function renderPost(para) {
     if (para.getAttribute('data-redmark') === 'on') return;
     if (para.__redmarkOrig == null) para.__redmarkOrig = para.innerHTML;
 
     var enabled = prefs.rules;
+    // Blocs d'abord (fences/listes) : restructure le DOM avant l'inline, pour
+    // que l'inline ne touche pas le contenu des fences et s'applique aux <li>.
+    if (enabled.fence || enabled.list || enabled.quote) processBlocks(para);
+
     var walker = document.createTreeWalker(para, NodeFilter.SHOW_TEXT, null, false);
     var targets = [];
     var n;
@@ -339,11 +561,13 @@
     var overlay = document.createElement('div');
     overlay.id = 'hfr-rm-overlay';
 
-    var rows = '';
-    for (var i = 0; i < RULES.length; i++) {
-      var r = RULES[i];
-      rows += '<label><input type="checkbox" data-rule="' + r.name + '"' +
-        (cur.rules[r.name] ? ' checked' : '') + '> ' + r.label + '</label>';
+    function checkboxes(defs) {
+      var s = '';
+      for (var i = 0; i < defs.length; i++) {
+        s += '<label><input type="checkbox" data-rule="' + defs[i].name + '"' +
+          (cur.rules[defs[i].name] ? ' checked' : '') + '> ' + defs[i].label + '</label>';
+      }
+      return s;
     }
 
     overlay.innerHTML =
@@ -352,10 +576,13 @@
         '<label><input type="checkbox" id="hfr-rm-enabled"' + (cur.enabled ? ' checked' : '') +
           '> <b>Activer le rendu Markdown</b></label>' +
         '<div class="sep"></div>' +
-        '<div style="font-weight:bold;margin-bottom:4px">Syntaxes</div>' +
-        rows +
-        '<div class="muted">Italique et gras __ désactivés par défaut ' +
-          '(faux positifs : snake_case, multiplications...).</div>' +
+        '<div style="font-weight:bold;margin-bottom:4px">Syntaxes en ligne</div>' +
+        checkboxes(RULES) +
+        '<div class="muted">Tout est activé. Désactivez l\'italique / gras __ ' +
+          'en cas de faux positifs (snake_case, multiplications...).</div>' +
+        '<div class="sep"></div>' +
+        '<div style="font-weight:bold;margin-bottom:4px">Blocs</div>' +
+        checkboxes(BLOCKS) +
         '<div class="sep"></div>' +
         '<label><input type="checkbox" id="hfr-rm-toggle"' + (cur.perPostToggle ? ' checked' : '') +
           '> Bouton de bascule (md) sur chaque post</label>' +
@@ -403,5 +630,24 @@
     document.addEventListener('DOMContentLoaded', processAll);
   } else {
     processAll();
+  }
+
+  // Hook de test (Node/CommonJS) : expose l'API interne. Inerte dans le
+  // navigateur (module indefini) — n'affecte pas le userscript livre.
+  if (typeof module !== 'undefined' && module.exports) {
+    module.exports = {
+      maskEscapes: maskEscapes,
+      emitInline: emitInline,
+      firstMatch: firstMatch,
+      inSkippableContext: inSkippableContext,
+      processBlocks: processBlocks,
+      renderPost: renderPost,
+      restorePost: restorePost,
+      RULES: RULES,
+      SKIP_CLASS: SKIP_CLASS,
+      SKIP_TAGS: SKIP_TAGS,
+      setPrefs: function (p) { prefs = p; },
+      getPrefs: function () { return prefs; }
+    };
   }
 })();

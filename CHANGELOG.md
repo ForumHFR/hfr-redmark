@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.2.0 — 2026-06-14
+
+### Nouveautés
+- Toutes les syntaxes activées par défaut (italique `*`/`_` et gras `__` inclus, désactivables)
+- Blocs de code multi-lignes ```` ``` ```` (avec langue optionnelle), rendus en `<pre><code>`
+- Listes à puces (`-`, `*`, `+`) et numérotées (`1.`) rendues en `<ul>`/`<ol>`
+- Task lists `- [ ]` / `- [x]` rendues en cases à cocher Unicode (☐ / ☑)
+- Citations Markdown `> texte` rendues en `<blockquote>` (distinctes des `[quote]` HFR)
+- Le rendu bloc reconstitue les lignes logiques entre les `<br>`, par paragraphe
+  `<p>` (spécificité HFR) — un paragraphe d'une seule ligne (ex. `> citation`) est rendu
+- Les paragraphes et citations HFR ne sont jamais avalés par un bloc (éléments-frontière)
+- Nouvelles préférences pour activer/désactiver chaque bloc
+
+### Interne
+- Suite de tests via jsdom requérant le userscript réel (source unique)
+
 ## 0.1.0 — 2026-06-14
 
 ### Nouveautés

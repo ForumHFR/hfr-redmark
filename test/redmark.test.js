@@ -1,109 +1,48 @@
-// Tests RedMark — sans dependance (node test/redmark.test.js)
-//
-// Couvre :
-//   1. le moteur inline (rendu, priorite, imbrication, anti-faux-positifs, echappement)
-//   2. le predicat inSkippableContext (citations, signatures, code, liens ignores)
-//   3. un garde anti-derive : les regex/selecteurs testes existent bien dans le .user.js
-//
-// Le moteur et le predicat sont recopies a l'identique du userscript ; le garde (3)
-// echoue si une regex change dans le .user.js sans etre repercutee ici.
+// Tests RedMark — jsdom + require du userscript reel (source unique, zero copie).
+//   npm test   (ou: node test/redmark.test.js)
 'use strict';
 var fs = require('fs');
 var path = require('path');
+var JSDOM = require('jsdom').JSDOM;
+
+// --- DOM + stubs GM avant le require (le userscript lit document/GM au chargement) ---
+var dom = new JSDOM('<!DOCTYPE html><body></body>', { url: 'https://forum.hardware.fr/' });
+global.window = dom.window;
+global.document = dom.window.document;
+global.NodeFilter = dom.window.NodeFilter;
+global.GM_addStyle = function () {};
+global.GM_registerMenuCommand = function () {};
+global.GM_getValue = function (k, d) { return d; };
+global.GM_setValue = function () {};
+
+var rm = require('../hfr-redmark.user.js');
+var document = global.document;
+// Defauts au chargement (capture AVANT tout setPrefs)
+var loadDefaults = JSON.parse(JSON.stringify(rm.getPrefs().rules));
 
 // =========================================================================
-// DOM stub minimal (TextNode / Element avec parentNode, DocumentFragment)
+// Helpers
 // =========================================================================
-function TextNode(s) { this.nodeType = 3; this.data = s; this.parentNode = null; }
-function El(tag) { this.nodeType = 1; this.tagName = tag.toUpperCase(); this.className = ''; this.children = []; this.parentNode = null; }
-El.prototype.appendChild = function (n) { n.parentNode = this; this.children.push(n); return n; };
-function Frag() { this.nodeType = 11; this.children = []; }
-Frag.prototype.appendChild = El.prototype.appendChild;
-var document = {
-  createTextNode: function (s) { return new TextNode(s); },
-  createElement: function (t) { return new El(t); },
-  createDocumentFragment: function () { return new Frag(); }
-};
-function serialize(node) {
-  if (node.nodeType === 3) return node.data;
-  if (node.nodeType === 11) return node.children.map(serialize).join('');
-  var inner = node.children.map(serialize).join('');
-  var cls = node.className ? ' class="' + node.className + '"' : '';
-  return '<' + node.tagName.toLowerCase() + cls + '>' + inner + '</' + node.tagName.toLowerCase() + '>';
-}
-// Constructeurs d'arbre cablant parentNode (pour tester inSkippableContext)
-function mkText(s) { return new TextNode(s); }
-function mkEl(tag, className, kids) {
-  var el = new El(tag); el.className = className || '';
-  (kids || []).forEach(function (k) { el.appendChild(k); });
-  return el;
-}
-
-// =========================================================================
-// MOTEUR (copie conforme du userscript)
-// =========================================================================
-var RULES = [
-  { name: 'code',    tag: 'code',   cls: 'redmark-code', literal: true, re: /`([^`\n]+)`/ },
-  { name: 'bold',    tag: 'strong', cls: '', re: /\*\*(\S(?:[^*]*?\S)?)\*\*/ },
-  { name: 'boldu',   tag: 'strong', cls: '', re: /__(\S(?:[^_]*?\S)?)__/ },
-  { name: 'strike',  tag: 'del',    cls: '', re: /~~(\S(?:[^~]*?\S)?)~~/ },
-  { name: 'italic',  tag: 'em',     cls: '', re: /\*(\S(?:[^*]*?\S)?)\*/ },
-  { name: 'italicu', tag: 'em',     cls: '', re: /_(\S(?:[^_]*?\S)?)_/ }
-];
-// Placeholders de zone privee construits sans caractere litteral dans la source.
-function pua(n) { return String.fromCharCode(0xE000 + n); }
-var ESC = { '\\': pua(0), '`': pua(1), '*': pua(2), '_': pua(3), '~': pua(4) };
-var UNESC = {}; Object.keys(ESC).forEach(function (k) { UNESC[ESC[k]] = k; });
-var reEscape = /\\([\\`*_~])/g;
-var reUnmask = new RegExp('[' + pua(0) + '-' + pua(4) + ']', 'g');
-function maskEscapes(s) { return s.replace(reEscape, function (m, c) { return ESC[c]; }); }
-function unmask(s) { return s.replace(reUnmask, function (c) { return UNESC[c]; }); }
-function txt(s) { return document.createTextNode(unmask(s)); }
-function firstMatch(str, enabled) {
-  var best = null;
-  for (var k = 0; k < RULES.length; k++) {
-    var rule = RULES[k]; if (!enabled[rule.name]) continue;
-    var m = rule.re.exec(str); if (!m) continue;
-    if (best === null || m.index < best.m.index) { best = { rule: rule, m: m }; if (m.index === 0) break; }
-  }
-  return best;
-}
-function emitInline(parent, str, enabled) {
-  while (str) {
-    var f = firstMatch(str, enabled);
-    if (!f) { parent.appendChild(txt(str)); return; }
-    if (f.m.index > 0) parent.appendChild(txt(str.slice(0, f.m.index)));
-    var el = document.createElement(f.rule.tag);
-    el.className = f.rule.cls ? ('redmark ' + f.rule.cls) : 'redmark';
-    if (f.rule.literal) el.appendChild(txt(f.m[1]));
-    else emitInline(el, f.m[1], enabled);
-    parent.appendChild(el);
-    str = str.slice(f.m.index + f.m[0].length);
-  }
-}
-function render(text, enabled) {
+function renderInline(text, rules) {
   var frag = document.createDocumentFragment();
-  emitInline(frag, maskEscapes(text), enabled);
-  return serialize(frag);
+  rm.emitInline(frag, rm.maskEscapes(text), rules);
+  var div = document.createElement('div');
+  div.appendChild(frag);
+  return div.innerHTML;
 }
-
-// inSkippableContext (copie conforme)
-var SKIP_TAGS = { A: 1, CODE: 1, PRE: 1, KBD: 1, SAMP: 1, TT: 1, TEXTAREA: 1,
-  SCRIPT: 1, STYLE: 1, SELECT: 1, OPTION: 1, BUTTON: 1 };
-var SKIP_CLASS = /(^|\s)(cita|cit\d?|cback|code|spoiler|sign|signature|sig|alerte|edited)(\s|$)/i;
-function inSkippableContext(node, root) {
-  for (var el = node.parentNode; el && el !== root && el.nodeType === 1; el = el.parentNode) {
-    if (SKIP_TAGS[el.tagName]) return true;
-    if (el.tagName === 'TABLE') return true;
-    var cls = el.className;
-    if (typeof cls === 'string' && SKIP_CLASS.test(cls)) return true;
+function para(html) {
+  var p = document.createElement('div');
+  p.innerHTML = html;
+  return p;
+}
+function firstText(node) { // premier noeud texte descendant
+  if (node.nodeType === 3) return node;
+  for (var i = 0; i < node.childNodes.length; i++) {
+    var r = firstText(node.childNodes[i]); if (r) return r;
   }
-  return false;
+  return null;
 }
 
-// =========================================================================
-// ASSERTIONS
-// =========================================================================
 var pass = 0, fail = 0;
 function eq(label, got, exp) {
   if (got === exp) { pass++; }
@@ -113,67 +52,146 @@ function eq(label, got, exp) {
 var DEFAULT = { code: true, bold: true, boldu: false, strike: true, italic: false, italicu: false };
 var ALL = { code: true, bold: true, boldu: true, strike: true, italic: true, italicu: true };
 
-// --- 1. Moteur inline ---
-eq('code flagship', render('`test`', DEFAULT), '<code class="redmark redmark-code">test</code>');
-eq('code inline', render('voici `du code` la', DEFAULT), 'voici <code class="redmark redmark-code">du code</code> la');
-eq('gras', render('**gras**', DEFAULT), '<strong class="redmark">gras</strong>');
-eq('barre', render('~~barre~~', DEFAULT), '<del class="redmark">barre</del>');
-eq('code protege gras', render('`**x**`', DEFAULT), '<code class="redmark redmark-code">**x**</code>');
-eq('imbrication gras>code', render('**a `b`**', DEFAULT), '<strong class="redmark">a <code class="redmark redmark-code">b</code></strong>');
-eq('faux positif multiplication', render('a * b * c', DEFAULT), 'a * b * c');
-eq('faux positif snake_case', render('my_var_name ok', DEFAULT), 'my_var_name ok');
-eq('faux positif exponentiation', render('2 ** 8 sans pair', DEFAULT), '2 ** 8 sans pair');
-eq('italique on-demande', render('*ital*', ALL), '<em class="redmark">ital</em>');
-eq('italique underscore', render('_ital_', ALL), '<em class="redmark">ital</em>');
-eq('echappement code', render('\\`pas code\\`', DEFAULT), '`pas code`');
-eq('echappement gras', render('\\*\\*pas gras\\*\\*', DEFAULT), '**pas gras**');
-eq('multi gras', render('**a** et **b**', DEFAULT), '<strong class="redmark">a</strong> et <strong class="redmark">b</strong>');
-eq('gras avec espace au bord', render('** pas gras **', DEFAULT), '** pas gras **');
-eq('backticks vides', render('rien `` ici', DEFAULT), 'rien `` ici');
-
-// --- 2. inSkippableContext (structures HFR reelles, verifiees le 2026-06-14) ---
-// mkEl cable parentNode des enfants ; para.appendChild cable le conteneur a la racine.
-var para = mkEl('div', ''); // racine = #para{N}
-
-// citation : div.container > table.citation > tr > td > texte  (verifie sur HFR)
-var citTxt = mkText('texte cite avec `code`');
-para.appendChild(mkEl('div', 'container', [ mkEl('table', 'citation', [ mkEl('tr', 'none', [ mkEl('td', '', [ citTxt ]) ]) ]) ]));
-eq('skip citation (table)', inSkippableContext(citTxt, para), true);
-
-// signature : span.signature > texte  (verifie sur HFR, dans le para)
-var sigTxt = mkText('ma signature **non rendue**');
-para.appendChild(mkEl('span', 'signature', [ sigTxt ]));
-eq('skip signature', inSkippableContext(sigTxt, para), true);
-
-// lien : a > texte
-var aTxt = mkText('lien `non rendu`');
-para.appendChild(mkEl('a', 'cLink', [ aTxt ]));
-eq('skip lien (a)', inSkippableContext(aTxt, para), true);
-
-// code HFR : pre > texte
-var preTxt = mkText('bloc code');
-para.appendChild(mkEl('pre', '', [ preTxt ]));
-eq('skip code (pre)', inSkippableContext(preTxt, para), true);
-
-// corps direct du message : NON skippe
-var bodyTxt = mkText('corps `rendu`');
-para.appendChild(bodyTxt);
-eq('corps rendu (non skip)', inSkippableContext(bodyTxt, para), false);
-
-// texte dans un span neutre du corps : NON skippe
-var spanTxt = mkText('emphase');
-para.appendChild(mkEl('span', 'fontd', [ spanTxt ]));
-eq('span neutre (non skip)', inSkippableContext(spanTxt, para), false);
-
-// --- 3. Garde anti-derive : coherence avec le .user.js livre ---
-var src = fs.readFileSync(path.join(__dirname, '..', 'hfr-redmark.user.js'), 'utf8');
-RULES.forEach(function (r) {
-  eq('regex "' + r.name + '" presente dans le .user.js', src.indexOf(r.re.source) !== -1, true);
+// Toutes les regles sont actives par defaut
+['code', 'bold', 'boldu', 'strike', 'italic', 'italicu', 'fence', 'list', 'task', 'quote'].forEach(function (k) {
+  eq('defaut ' + k + ' = true', loadDefaults[k], true);
 });
-eq('SKIP_CLASS coherente', src.indexOf(SKIP_CLASS.source) !== -1, true);
-eq('version 0.1.0 dans le .user.js', /@version\s+0\.1\.0/.test(src), true);
+
+// =========================================================================
+// 1. Moteur inline
+// =========================================================================
+eq('code flagship', renderInline('`test`', DEFAULT), '<code class="redmark redmark-code">test</code>');
+eq('code inline', renderInline('voici `du code` la', DEFAULT), 'voici <code class="redmark redmark-code">du code</code> la');
+eq('gras', renderInline('**gras**', DEFAULT), '<strong class="redmark">gras</strong>');
+eq('barre', renderInline('~~barre~~', DEFAULT), '<del class="redmark">barre</del>');
+eq('code protege gras', renderInline('`**x**`', DEFAULT), '<code class="redmark redmark-code">**x**</code>');
+eq('imbrication gras>code', renderInline('**a `b`**', DEFAULT), '<strong class="redmark">a <code class="redmark redmark-code">b</code></strong>');
+eq('faux positif multiplication', renderInline('a * b * c', DEFAULT), 'a * b * c');
+eq('faux positif snake_case', renderInline('my_var_name ok', DEFAULT), 'my_var_name ok');
+eq('faux positif exponentiation', renderInline('2 ** 8 sans pair', DEFAULT), '2 ** 8 sans pair');
+eq('italique on-demande', renderInline('*ital*', ALL), '<em class="redmark">ital</em>');
+eq('italique underscore', renderInline('_ital_', ALL), '<em class="redmark">ital</em>');
+eq('echappement code', renderInline('\\`pas code\\`', DEFAULT), '`pas code`');
+eq('echappement gras', renderInline('\\*\\*pas gras\\*\\*', DEFAULT), '**pas gras**');
+eq('multi gras', renderInline('**a** et **b**', DEFAULT), '<strong class="redmark">a</strong> et <strong class="redmark">b</strong>');
+eq('gras avec espace au bord', renderInline('** pas gras **', DEFAULT), '** pas gras **');
+eq('backticks vides', renderInline('rien `` ici', DEFAULT), 'rien `` ici');
+
+// =========================================================================
+// 2. inSkippableContext (structures HFR reelles, verifiees le 2026-06-14)
+// =========================================================================
+var pCit = para('<div class="container"><table class="citation"><tr class="none"><td>texte cite</td></tr></table></div>');
+eq('skip citation (table)', rm.inSkippableContext(pCit.querySelector('td').firstChild, pCit), true);
+var pSig = para('<span class="signature">ma signature</span>');
+eq('skip signature', rm.inSkippableContext(pSig.querySelector('.signature').firstChild, pSig), true);
+var pLink = para('<a class="cLink">lien</a>');
+eq('skip lien (a)', rm.inSkippableContext(pLink.querySelector('a').firstChild, pLink), true);
+var pPre = para('<pre>bloc code</pre>');
+eq('skip code (pre)', rm.inSkippableContext(pPre.querySelector('pre').firstChild, pPre), true);
+var pBody = para('corps du message');
+eq('corps rendu (non skip)', rm.inSkippableContext(pBody.firstChild, pBody), false);
+var pSpan = para('<span class="fontd">emphase</span>');
+eq('span neutre (non skip)', rm.inSkippableContext(pSpan.querySelector('span').firstChild, pSpan), false);
+
+// =========================================================================
+// 4. Blocs (fenced code, listes, task lists) — sur lignes separees par <br>
+// =========================================================================
+var BLOCK = { code: true, bold: true, boldu: false, strike: true, italic: false, italicu: false,
+  fence: true, list: true, task: true, quote: true };
+function blockHtml(html, rules) {
+  rm.setPrefs({ enabled: true, perPostToggle: false, rules: rules || BLOCK });
+  var p = para(html);
+  rm.processBlocks(p);
+  return p.innerHTML;
+}
+
+// fenced code
+eq('fenced code avec langue', blockHtml('```js<br>const x = 1;<br>```'),
+  '<pre class="redmark redmark-pre"><code class="language-js">const x = 1;</code></pre>');
+eq('fenced code sans langue', blockHtml('```<br>plain<br>```'),
+  '<pre class="redmark redmark-pre"><code>plain</code></pre>');
+eq('fenced code multi-lignes', blockHtml('```<br>a<br>b<br>```'),
+  '<pre class="redmark redmark-pre"><code>a\nb</code></pre>');
+eq('fenced code non ferme = inchange', blockHtml('```<br>a<br>b'), '```<br>a<br>b');
+eq('fenced code echappe le HTML', blockHtml('```html<br>&lt;div&gt;<br>```'),
+  '<pre class="redmark redmark-pre"><code class="language-html">&lt;div&gt;</code></pre>');
+
+// listes non ordonnees
+eq('liste a puces (-)', blockHtml('- un<br>- deux<br>- trois'),
+  '<ul class="redmark redmark-list"><li>un</li><li>deux</li><li>trois</li></ul>');
+eq('liste marqueur *', blockHtml('* x<br>* y'),
+  '<ul class="redmark redmark-list"><li>x</li><li>y</li></ul>');
+eq('liste marqueur +', blockHtml('+ x<br>+ y'),
+  '<ul class="redmark redmark-list"><li>x</li><li>y</li></ul>');
+eq('liste un seul item (avec saut de ligne)', blockHtml('- seul<br>'),
+  '<ul class="redmark redmark-list"><li>seul</li></ul>');
+// Fallback conservateur : un para SANS <p> et sans <br> (cas rare, vieux posts)
+// n'est pas un hote -> pas de bloc. Sur HFR moderne, une ligne unique est dans un
+// <p> et EST rendue (voir tests "HFR: ... ligne unique").
+eq('para nu, ligne unique sans <br> = inchange', blockHtml('- seul'), '- seul');
+eq('liste ordonnee', blockHtml('1. a<br>2. b'),
+  '<ol class="redmark redmark-list"><li>a</li><li>b</li></ol>');
+eq('liste puis texte', blockHtml('- a<br>- b<br>suite'),
+  '<ul class="redmark redmark-list"><li>a</li><li>b</li></ul>suite');
+eq('ul puis ol = deux listes', blockHtml('- a<br>1. b'),
+  '<ul class="redmark redmark-list"><li>a</li></ul><ol class="redmark redmark-list"><li>b</li></ol>');
+eq('pas une liste : tiret sans espace', blockHtml('-pasliste<br>-non'), '-pasliste<br>-non');
+
+// blockquotes (> ) — distinctes des citations HFR ([quote] = <table>)
+eq('blockquote multi-lignes', blockHtml('&gt; cite<br>&gt; deux'),
+  '<blockquote class="redmark redmark-quote">cite<br>deux</blockquote>');
+eq('blockquote puis texte', blockHtml('&gt; q<br>texte'),
+  '<blockquote class="redmark redmark-quote">q</blockquote>texte');
+eq('blockquote sans espace', blockHtml('&gt;a<br>&gt;b'),
+  '<blockquote class="redmark redmark-quote">a<br>b</blockquote>');
+
+// task lists (rendu en symboles Unicode)
+eq('task list cochee/decochee', blockHtml('- [ ] a<br>- [x] b'),
+  '<ul class="redmark redmark-list">' +
+  '<li class="redmark-task"><span class="redmark-check">☐</span> a</li>' +
+  '<li class="redmark-task"><span class="redmark-check">☑</span> b</li></ul>');
+
+// integration renderPost : blocs PUIS inline, composes correctement
+function renderFull(html, rules) {
+  rm.setPrefs({ enabled: true, perPostToggle: false, rules: rules || BLOCK });
+  var p = para(html);
+  rm.renderPost(p);
+  return p.innerHTML;
+}
+eq('integration liste + inline', renderFull('- **a**<br>- b'),
+  '<ul class="redmark redmark-list"><li><strong class="redmark">a</strong></li><li>b</li></ul>');
+eq('integration fence non touche par inline', renderFull('```<br>**reste brut**<br>```'),
+  '<pre class="redmark redmark-pre"><code>**reste brut**</code></pre>');
+eq('integration blockquote + inline', renderFull('&gt; **fort**<br>&gt; x'),
+  '<blockquote class="redmark redmark-quote"><strong class="redmark">fort</strong><br>x</blockquote>');
+var citHtml = '<div class="container"><table class="citation"><tr><td>- a<br>- b</td></tr></table></div>';
+eq('integration citation inchangee', renderFull(citHtml), para(citHtml).innerHTML);
+
+// Structure HFR REELLE : corps enveloppe dans des <p>, paragraphes separes par &nbsp;.
+// Un paragraphe d'une seule ligne (son propre <p> sans <br>) doit etre traite.
+eq('HFR: quote en <p> ligne unique', renderFull('<p>&gt; cite</p>'),
+  '<p><blockquote class="redmark redmark-quote">cite</blockquote></p>');
+eq('HFR: liste en <p> ligne unique', renderFull('<p>* seul</p>'),
+  '<p><ul class="redmark redmark-list"><li>seul</li></ul></p>');
+eq('HFR: multi-<p> liste puis quote, &nbsp; et structure preserves',
+  renderFull('<p>intro<br>* a<br>* b</p>&nbsp;<p>&gt; cite</p>'),
+  '<p>intro<br><ul class="redmark redmark-list"><li>a</li><li>b</li></ul></p>&nbsp;<p><blockquote class="redmark redmark-quote">cite</blockquote></p>');
+
+// gating + robustesse
+var noBlocks = { code: true, bold: true, boldu: false, strike: true, italic: false, italicu: false,
+  fence: false, list: false, task: false, quote: false };
+eq('blocs desactives = inchange', blockHtml('```<br>x<br>```', noBlocks), '```<br>x<br>```');
+eq('fence entoure de texte', blockHtml('avant<br>```<br>code<br>```<br>apres'),
+  'avant<br><pre class="redmark redmark-pre"><code>code</code></pre>apres');
+
+// =========================================================================
+// 3. Coherence version (.user.js <-> CHANGELOG)
+// =========================================================================
+var src = fs.readFileSync(path.join(__dirname, '..', 'hfr-redmark.user.js'), 'utf8');
+var ver = (src.match(/@version\s+(\S+)/) || [])[1] || '';
 var changelog = fs.readFileSync(path.join(__dirname, '..', 'CHANGELOG.md'), 'utf8');
-eq('version 0.1.0 dans le CHANGELOG', /^##\s+0\.1\.0/m.test(changelog), true);
+eq('version presente dans le .user.js', ver.length > 0, true);
+eq('version coherente avec CHANGELOG', new RegExp('^##\\s+' + ver.replace(/\./g, '\\.'), 'm').test(changelog), true);
 
 // =========================================================================
 console.log('\n' + pass + ' passed, ' + fail + ' failed');

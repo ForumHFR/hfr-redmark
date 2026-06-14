@@ -7,8 +7,9 @@
 - Listes à puces (`-`, `*`, `+`) et numérotées (`1.`) rendues en `<ul>`/`<ol>`
 - Task lists `- [ ]` / `- [x]` rendues en cases à cocher Unicode (☐ / ☑)
 - Citations Markdown `> texte` rendues en `<blockquote>` (distinctes des `[quote]` HFR)
-- Le rendu bloc reconstitue les lignes logiques entre les `<br>` (spécificité HFR)
-- Conservateur : pas de bloc sur une ligne unique sans saut de ligne
+- Le rendu bloc reconstitue les lignes logiques entre les `<br>`, par paragraphe
+  `<p>` (spécificité HFR) — un paragraphe d'une seule ligne (ex. `> citation`) est rendu
+- Les paragraphes et citations HFR ne sont jamais avalés par un bloc (éléments-frontière)
 - Nouvelles préférences pour activer/désactiver chaque bloc
 
 ### Interne

@@ -300,18 +300,37 @@
     return false;
   }
 
+  // Elements qui cassent une ligne logique : blocs (p, div, listes, citations...)
+  // et contextes a ignorer (signature...). Ils ne font partie d'aucune ligne
+  // Markdown et coupent les runs (un <p> ne fusionne pas avec ses voisins).
+  var BLOCK_BOUNDARY = { P: 1, DIV: 1, UL: 1, OL: 1, PRE: 1, BLOCKQUOTE: 1, TABLE: 1,
+    HR: 1, FIGURE: 1, H1: 1, H2: 1, H3: 1, H4: 1, H5: 1, H6: 1 };
+  function isBoundaryEl(n) {
+    if (n.nodeType !== 1) return false;
+    if (BLOCK_BOUNDARY[n.tagName]) return true;
+    var cls = n.className;
+    return typeof cls === 'string' && SKIP_CLASS.test(cls);
+  }
+
   // Segmente les enfants directs de host en lignes (separateur = <br>).
+  // Les elements-frontiere (blocs/skip) sont exclus et inserent une coupure.
   function segmentLines(host) {
     var lines = [];
     var cur = { nodes: [], br: null };
     var kids = Array.prototype.slice.call(host.childNodes);
     for (var i = 0; i < kids.length; i++) {
       var n = kids[i];
-      if (n.nodeType === 1 && n.tagName === 'BR') { cur.br = n; lines.push(cur); cur = { nodes: [], br: null }; }
-      else cur.nodes.push(n);
+      if (n.nodeType === 1 && n.tagName === 'BR') {
+        cur.br = n; lines.push(cur); cur = { nodes: [], br: null };
+      } else if (isBoundaryEl(n)) {
+        lines.push(cur); cur = { nodes: [], br: null };
+        lines.push({ nodes: [], br: null, boundary: true });
+      } else {
+        cur.nodes.push(n);
+      }
     }
     lines.push(cur);
-    for (var j = 0; j < lines.length; j++) lines[j].text = lineText(lines[j].nodes);
+    for (var j = 0; j < lines.length; j++) lines[j].text = lines[j].boundary ? '\x00' : lineText(lines[j].nodes);
     return lines;
   }
 
@@ -418,13 +437,13 @@
 
   function processBlocks(para) {
     var hosts = [];
+    // Le para n'est un hote direct que s'il porte des lignes (contexte multi-ligne) ;
+    // sinon les vraies lignes sont dans les <p> (structure HFR).
     if (hasDirectBr(para)) hosts.push(para);
-    var els = para.getElementsByTagName('*');
-    for (var i = 0; i < els.length; i++) {
-      var el = els[i];
-      if (!hasDirectBr(el)) continue;
-      if (hostExcluded(el, para)) continue;
-      hosts.push(el);
+    // Chaque <p> est une unite de paragraphe HFR : hote meme sans <br> (ligne unique).
+    var ps = para.getElementsByTagName('p');
+    for (var i = 0; i < ps.length; i++) {
+      if (!hostExcluded(ps[i], para)) hosts.push(ps[i]);
     }
     for (var h = 0; h < hosts.length; h++) processHost(hosts[h]);
   }

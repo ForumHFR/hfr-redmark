@@ -60,10 +60,15 @@ HFR sépare les lignes par `<br>`, pas par `\n`. Le rendu bloc tourne **avant**
 l'inline (pour que le contenu des fences ne soit pas réinterprété et que l'inline
 s'applique dans les `<li>`).
 
-- **Hôtes de lignes** : `para` + tout descendant contenant un `<br>` direct, sauf
-  s'il est sous une citation/`<table>`/signature/code (`hostExcluded`).
-- `segmentLines(host)` : découpe les enfants directs en lignes (séparateur `<br>`),
-  chaque ligne garde ses nœuds + le `<br>` suivant + son texte concaténé.
+- **Hôtes de lignes** : HFR enveloppe chaque paragraphe (séparé par une ligne vide)
+  dans un `<p>`, les `<p>` étant séparés par des nœuds texte `&nbsp;`. Les hôtes sont
+  donc : le `para` **s'il a un `<br>` direct** (posts sans `<p>`) **+ chaque `<p>`**
+  (hôte même sans `<br>` → un paragraphe d'une seule ligne comme `> cite` est traité),
+  hors contextes ignorés (`hostExcluded` : citation/`<table>`/signature/code).
+- `segmentLines(host)` : découpe les enfants directs en lignes (séparateur `<br>`).
+  Les **éléments-frontière** (`isBoundaryEl` : `p`/`div`/`ul`/`ol`/`pre`/`blockquote`/
+  `table`/titres + classes skip) sont exclus des lignes et **coupent les runs** — ainsi
+  le niveau `para` n'avale jamais un `<p>` dans une liste/citation.
 - `processHost` détecte des **runs** : fence (ligne ```` ``` ```` → ligne ```` ``` ````),
   suite de lignes de même type de liste (`listType`), ou suite de lignes `> ` (quote).
   Les ops sont appliquées **de la fin vers le début** pour garder les références valides.

@@ -118,9 +118,10 @@ eq('liste marqueur +', blockHtml('+ x<br>+ y'),
   '<ul class="redmark redmark-list"><li>x</li><li>y</li></ul>');
 eq('liste un seul item (avec saut de ligne)', blockHtml('- seul<br>'),
   '<ul class="redmark redmark-list"><li>seul</li></ul>');
-// Conservateur : une seule ligne sans <br> n'est jamais un bloc (evite de
-// transformer un post entier "- bof" en liste).
-eq('conservateur : ligne unique sans <br> = inchange', blockHtml('- seul'), '- seul');
+// Fallback conservateur : un para SANS <p> et sans <br> (cas rare, vieux posts)
+// n'est pas un hote -> pas de bloc. Sur HFR moderne, une ligne unique est dans un
+// <p> et EST rendue (voir tests "HFR: ... ligne unique").
+eq('para nu, ligne unique sans <br> = inchange', blockHtml('- seul'), '- seul');
 eq('liste ordonnee', blockHtml('1. a<br>2. b'),
   '<ol class="redmark redmark-list"><li>a</li><li>b</li></ol>');
 eq('liste puis texte', blockHtml('- a<br>- b<br>suite'),
@@ -158,6 +159,16 @@ eq('integration blockquote + inline', renderFull('&gt; **fort**<br>&gt; x'),
   '<blockquote class="redmark redmark-quote"><strong class="redmark">fort</strong><br>x</blockquote>');
 var citHtml = '<div class="container"><table class="citation"><tr><td>- a<br>- b</td></tr></table></div>';
 eq('integration citation inchangee', renderFull(citHtml), para(citHtml).innerHTML);
+
+// Structure HFR REELLE : corps enveloppe dans des <p>, paragraphes separes par &nbsp;.
+// Un paragraphe d'une seule ligne (son propre <p> sans <br>) doit etre traite.
+eq('HFR: quote en <p> ligne unique', renderFull('<p>&gt; cite</p>'),
+  '<p><blockquote class="redmark redmark-quote">cite</blockquote></p>');
+eq('HFR: liste en <p> ligne unique', renderFull('<p>* seul</p>'),
+  '<p><ul class="redmark redmark-list"><li>seul</li></ul></p>');
+eq('HFR: multi-<p> liste puis quote, &nbsp; et structure preserves',
+  renderFull('<p>intro<br>* a<br>* b</p>&nbsp;<p>&gt; cite</p>'),
+  '<p>intro<br><ul class="redmark redmark-list"><li>a</li><li>b</li></ul></p>&nbsp;<p><blockquote class="redmark redmark-quote">cite</blockquote></p>');
 
 // gating + robustesse
 var noBlocks = { code: true, bold: true, boldu: false, strike: true, italic: false, italicu: false,

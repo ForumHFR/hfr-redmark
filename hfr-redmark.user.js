@@ -167,10 +167,10 @@
   // Masquage des echappements \` \* \_ \~ \\ : on remplace par des caracteres
   // de la zone privee Unicode pour que les regex ne les voient pas, puis on
   // restitue le caractere litteral a l'emission du texte.
-  var ESC = { '\\': '', '`': '', '*': '', '_': '', '~': '' };
-  var UNESC = { '': '\\', '': '`', '': '*', '': '_', '': '~' };
+  var ESC = { '\\': '\uE000', '`': '\uE001', '*': '\uE002', '_': '\uE003', '~': '\uE004' };
+  var UNESC = { '\uE000': '\\', '\uE001': '`', '\uE002': '*', '\uE003': '_', '\uE004': '~' };
   var reEscape = /\\([\\`*_~])/g;
-  var reUnmask = /[-]/g;
+  var reUnmask = /[\uE000-\uE004]/g;
   var reMd = /[`*_~\\]/; // detection rapide : y a-t-il quelque chose a faire ?
 
   function maskEscapes(s) { return s.replace(reEscape, function (m, c) { return ESC[c]; }); }

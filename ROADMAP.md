@@ -14,6 +14,8 @@ Principe directeur : **chaque nouvelle syntaxe doit pouvoir être désactivée**
 - [x] Le code protège les délimiteurs internes
 - [x] Bascule `md` par post + interrupteur global
 - [x] Préférences (menu Tampermonkey)
+- [x] Sélecteurs DOM vérifiés sur page HFR réelle (citation/signature dans `#para`)
+- [x] Suite de tests sans dépendance + CI (`node test/redmark.test.js`)
 
 ## v0.2 — Blocs
 
@@ -43,9 +45,9 @@ reconstituer des « lignes logiques » entre les `<br>` du `div#para`.
 - [ ] Mode « strict » : ne rendre que les posts contenant un marqueur explicite
       (ex. première ligne `[md]`) pour une intégration ultra-discrète
 - [ ] Préférence « rendre seulement mes posts » / « tous les posts »
-- [ ] Fixtures : échantillons HTML de posts HFR (citations, code, spoilers) dans
-      `samples/` pour tests de non-régression du parcours DOM
-- [ ] Suite de tests du moteur inline embarquée dans le repo (CI)
+- [ ] Fixtures HTML synthétiques (anonymisées) de posts HFR — citations, code,
+      spoilers, multi-`<br>` — pour test d'intégration via jsdom (au-delà du
+      predicat déjà couvert sans dépendance)
 
 ## Idées d'intégration propre (backlog)
 

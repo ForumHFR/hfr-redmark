@@ -25,6 +25,13 @@ Structure d'un post (vérifiée via le parser de `hfr-mcp`) :
 Clé unique d'un post sur HFR : `(cat, numreponse)`. Le `numreponse` est un
 auto-increment **par catégorie**, pas global.
 
+**Vérifié sur page réelle (2026-06-14)** : à l'intérieur du `div#para{N}`,
+- une **citation** `[quote]` est rendue en `div.container > table.citation > tr > td`
+  → ignorée par le skip de toute balise `<table>` imbriquée ;
+- une **signature** est un `<span class="signature">` présent *dans* le `para`
+  → ignorée par `SKIP_CLASS` (alternative `signature`).
+Les deux mécanismes de skip sont donc nécessaires. Couvert par `test/redmark.test.js`.
+
 ## Architecture du rendu
 
 ```
@@ -97,7 +104,15 @@ tête de fichier, en plus de `CHANGELOG.md`.
 
 ## Tests
 
-Le moteur inline est testable hors navigateur avec un DOM stub (createTextNode /
-createElement / DocumentFragment) en sérialisant le fragment produit. Couvrir :
-flagship `` `test` ``, protection du code, imbrication, anti-faux-positifs
-(italique off), échappements, multi-occurrences. À embarquer dans le repo + CI (roadmap).
+`node test/redmark.test.js` (sans dépendance, exécuté en CI via `.github/workflows/test.yml`).
+
+Couvre, avec un DOM stub (TextNode/Element/Fragment + parentNode) :
+1. **moteur inline** — flagship `` `test` ``, protection du code, imbrication,
+   anti-faux-positifs (italique off), échappements, multi-occurrences ;
+2. **`inSkippableContext`** — citations (`<table>`), signatures (`.signature`),
+   liens (`<a>`), code (`<pre>`) ignorés ; corps du message rendu ;
+3. **garde anti-dérive** — chaque regex `RULES`, `SKIP_CLASS` et la version doivent
+   exister à l'identique dans le `.user.js` et le `CHANGELOG.md` (sinon échec).
+
+Le moteur et le predicat sont recopiés dans le test (le `.user.js` n'exporte rien) :
+le garde (3) signale toute divergence. Une suite d'intégration jsdom est en roadmap.

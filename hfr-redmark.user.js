@@ -404,4 +404,22 @@
   } else {
     processAll();
   }
+
+  // Hook de test (Node/CommonJS) : expose l'API interne. Inerte dans le
+  // navigateur (module indefini) — n'affecte pas le userscript livre.
+  if (typeof module !== 'undefined' && module.exports) {
+    module.exports = {
+      maskEscapes: maskEscapes,
+      emitInline: emitInline,
+      firstMatch: firstMatch,
+      inSkippableContext: inSkippableContext,
+      renderPost: renderPost,
+      restorePost: restorePost,
+      RULES: RULES,
+      SKIP_CLASS: SKIP_CLASS,
+      SKIP_TAGS: SKIP_TAGS,
+      setPrefs: function (p) { prefs = p; },
+      getPrefs: function () { return prefs; }
+    };
+  }
 })();

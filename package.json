@@ -1,0 +1,12 @@
+{
+  "name": "hfr-redmark",
+  "version": "0.2.0",
+  "private": true,
+  "description": "Userscript HFR — rendu Markdown a la lecture des posts",
+  "scripts": {
+    "test": "node --check hfr-redmark.user.js && node test/redmark.test.js"
+  },
+  "devDependencies": {
+    "jsdom": "^29.1.1"
+  }
+}

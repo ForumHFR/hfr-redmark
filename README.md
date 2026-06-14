@@ -38,8 +38,9 @@ L'italique et le gras `__` sont **désactivés par défaut** : ils génèrent tr
 | `- item` / `* item` / `+ item` | liste à puces | Oui |
 | `1. item` | liste numérotée | Oui |
 | `- [ ] tâche` / `- [x] fait` | case à cocher ☐ / ☑ | Oui |
+| `> citation` | bloc de citation (`<blockquote>`) | Oui |
 
-Les blocs ne sont détectés que dans un **contexte multi-lignes** : une ligne unique (un post sans saut de ligne) commençant par `-` ou un nombre n'est jamais transformée. Le contenu d'un bloc de code n'est jamais réinterprété (le `**` y reste littéral).
+La citation `>` est distincte du `[quote]` de HFR (qui reste rendu par HFR). Les blocs ne sont détectés que dans un **contexte multi-lignes** : une ligne unique (un post sans saut de ligne) commençant par `-` ou un nombre n'est jamais transformée. Le contenu d'un bloc de code n'est jamais réinterprété (le `**` y reste littéral).
 
 Échappement : `` \` ``, `\*`, `\_`, `\~`, `\\` permettent d'afficher le caractère littéral.
 

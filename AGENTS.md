@@ -65,11 +65,13 @@ s'applique dans les `<li>`).
 - `segmentLines(host)` : découpe les enfants directs en lignes (séparateur `<br>`),
   chaque ligne garde ses nœuds + le `<br>` suivant + son texte concaténé.
 - `processHost` détecte des **runs** : fence (ligne ```` ``` ```` → ligne ```` ``` ````),
-  ou suite de lignes de même type de liste (`listType`). Les ops sont appliquées
-  **de la fin vers le début** pour garder les références valides.
-- `applyOp` construit `<pre><code>` (texte brut joint par `\n`) ou `<ul>/<ol>` de
-  `<li>` (marqueur retiré du 1er nœud texte, task list → `<span class="redmark-check">`
-  ☐/☑). `replaceLines` insère le bloc puis retire les nœuds/`<br>` consommés.
+  suite de lignes de même type de liste (`listType`), ou suite de lignes `> ` (quote).
+  Les ops sont appliquées **de la fin vers le début** pour garder les références valides.
+- `applyOp` construit `<pre><code>` (texte brut joint par `\n`), `<ul>/<ol>` de `<li>`
+  (marqueur retiré du 1er nœud texte, task list → `<span class="redmark-check">` ☐/☑),
+  ou `<blockquote>` (marqueur `>` retiré, lignes séparées par des `<br>` neufs).
+  La citation `>` est **distincte** du `[quote]` HFR (table, exclue des hôtes).
+  `replaceLines` insère le bloc puis retire les nœuds/`<br>` consommés.
 - **Conservateur** : pas de bloc sans contexte multi-lignes (un `para` sans `<br>`
   n'est jamais un hôte) → un post d'une ligne « - bof » reste du texte.
 
@@ -138,7 +140,8 @@ Couvre :
 1. **moteur inline** — flagship `` `test` ``, protection du code, imbrication,
    anti-faux-positifs (italique off), échappements ;
 2. **blocs** — fences (langue, multi-lignes, non fermée, échappement HTML),
-   listes (`-`/`*`/`+`/`1.`, frontières, ul→ol), task lists ☐/☑, gating, conservateur ;
+   listes (`-`/`*`/`+`/`1.`, frontières, ul→ol), task lists ☐/☑, blockquotes `>`,
+   gating, conservateur ;
 3. **intégration `renderPost`** — blocs+inline composés, fence non touché par l'inline,
    citation inchangée ;
 4. **`inSkippableContext`** — citations/signatures/liens/code ignorés ;

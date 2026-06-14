@@ -101,7 +101,8 @@
   var BLOCKS = [
     { name: 'fence', label: 'Bloc de code  ```' },
     { name: 'list',  label: 'Listes  -  *  +  1.' },
-    { name: 'task',  label: 'Cases à cocher  - [ ] / - [x]' }
+    { name: 'task',  label: 'Cases à cocher  - [ ] / - [x]' },
+    { name: 'quote', label: 'Citation  > texte' }
   ];
 
   // Defauts : les regles a faible taux de faux positifs sont actives.
@@ -113,7 +114,7 @@
     perPostToggle: true,
     rules: {
       code: true, bold: true, boldu: false, strike: true, italic: false, italicu: false,
-      fence: true, list: true, task: true
+      fence: true, list: true, task: true, quote: true
     }
   };
 
@@ -161,6 +162,8 @@
     'ul.redmark-list li,ol.redmark-list li{margin:1px 0;}' +
     'li.redmark-task{list-style:none;margin-left:-18px;}' +
     '.redmark-check{display:inline-block;width:1em;}' +
+    'blockquote.redmark-quote{margin:6px 0;padding:2px 12px;border-left:3px solid #b9c2cc;' +
+      'color:#5a6573;background:rgba(127,127,127,.07);}' +
     '.redmark-toggle{display:inline-block;cursor:pointer;font:11px/1.4 monospace;' +
       'padding:0 5px;margin-left:8px;border:1px solid #b9c2cc;border-radius:3px;' +
       'color:#8b97a4;background:transparent;user-select:none;vertical-align:middle;}' +
@@ -261,6 +264,8 @@
   var reOL = /^\s*\d+\.\s+\S/;          // numero. + espace + contenu
   var reStripUL = /^\s*[-*+]\s+/;
   var reStripOL = /^\s*\d+\.\s+/;
+  var reQuote = /^\s*>/;                // citation Markdown (distincte du [quote] HFR)
+  var reStripQuote = /^\s*>\s?/;
 
   function listType(text) {
     if (reOL.test(text)) return 'ol';
@@ -344,6 +349,12 @@
           i = e; continue;
         }
       }
+      if (rules.quote && reQuote.test(lines[i].text)) {
+        var q = i + 1;
+        while (q < lines.length && reQuote.test(lines[q].text)) q++;
+        ops.push({ type: 'quote', from: i, to: q - 1 });
+        i = q; continue;
+      }
       i++;
     }
     // applique de la fin vers le debut : les index/refs restent valides
@@ -390,6 +401,18 @@
         listEl.appendChild(item);
         if (lines[li].br && lines[li].br.parentNode === host) host.removeChild(lines[li].br);
       }
+    } else if (op.type === 'quote') {
+      var bq = document.createElement('blockquote');
+      bq.className = 'redmark redmark-quote';
+      var qa = lines[op.from].nodes[0] || lines[op.from].br || null;
+      host.insertBefore(bq, qa);
+      for (var q = op.from; q <= op.to; q++) {
+        var qn = lines[q].nodes;
+        if (qn.length && qn[0].nodeType === 3) qn[0].nodeValue = qn[0].nodeValue.replace(reStripQuote, '');
+        for (var p = 0; p < qn.length; p++) bq.appendChild(qn[p]);
+        if (q < op.to) bq.appendChild(document.createElement('br'));
+        if (lines[q].br && lines[q].br.parentNode === host) host.removeChild(lines[q].br);
+      }
     }
   }
 
@@ -413,7 +436,7 @@
     var enabled = prefs.rules;
     // Blocs d'abord (fences/listes) : restructure le DOM avant l'inline, pour
     // que l'inline ne touche pas le contenu des fences et s'applique aux <li>.
-    if (enabled.fence || enabled.list) processBlocks(para);
+    if (enabled.fence || enabled.list || enabled.quote) processBlocks(para);
 
     var walker = document.createTreeWalker(para, NodeFilter.SHOW_TEXT, null, false);
     var targets = [];

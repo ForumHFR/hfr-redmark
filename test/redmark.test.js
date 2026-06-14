@@ -90,7 +90,7 @@ eq('span neutre (non skip)', rm.inSkippableContext(pSpan.querySelector('span').f
 // 4. Blocs (fenced code, listes, task lists) — sur lignes separees par <br>
 // =========================================================================
 var BLOCK = { code: true, bold: true, boldu: false, strike: true, italic: false, italicu: false,
-  fence: true, list: true, task: true };
+  fence: true, list: true, task: true, quote: true };
 function blockHtml(html, rules) {
   rm.setPrefs({ enabled: true, perPostToggle: false, rules: rules || BLOCK });
   var p = para(html);
@@ -129,6 +129,14 @@ eq('ul puis ol = deux listes', blockHtml('- a<br>1. b'),
   '<ul class="redmark redmark-list"><li>a</li></ul><ol class="redmark redmark-list"><li>b</li></ol>');
 eq('pas une liste : tiret sans espace', blockHtml('-pasliste<br>-non'), '-pasliste<br>-non');
 
+// blockquotes (> ) — distinctes des citations HFR ([quote] = <table>)
+eq('blockquote multi-lignes', blockHtml('&gt; cite<br>&gt; deux'),
+  '<blockquote class="redmark redmark-quote">cite<br>deux</blockquote>');
+eq('blockquote puis texte', blockHtml('&gt; q<br>texte'),
+  '<blockquote class="redmark redmark-quote">q</blockquote>texte');
+eq('blockquote sans espace', blockHtml('&gt;a<br>&gt;b'),
+  '<blockquote class="redmark redmark-quote">a<br>b</blockquote>');
+
 // task lists (rendu en symboles Unicode)
 eq('task list cochee/decochee', blockHtml('- [ ] a<br>- [x] b'),
   '<ul class="redmark redmark-list">' +
@@ -146,12 +154,14 @@ eq('integration liste + inline', renderFull('- **a**<br>- b'),
   '<ul class="redmark redmark-list"><li><strong class="redmark">a</strong></li><li>b</li></ul>');
 eq('integration fence non touche par inline', renderFull('```<br>**reste brut**<br>```'),
   '<pre class="redmark redmark-pre"><code>**reste brut**</code></pre>');
+eq('integration blockquote + inline', renderFull('&gt; **fort**<br>&gt; x'),
+  '<blockquote class="redmark redmark-quote"><strong class="redmark">fort</strong><br>x</blockquote>');
 var citHtml = '<div class="container"><table class="citation"><tr><td>- a<br>- b</td></tr></table></div>';
 eq('integration citation inchangee', renderFull(citHtml), para(citHtml).innerHTML);
 
 // gating + robustesse
 var noBlocks = { code: true, bold: true, boldu: false, strike: true, italic: false, italicu: false,
-  fence: false, list: false, task: false };
+  fence: false, list: false, task: false, quote: false };
 eq('blocs desactives = inchange', blockHtml('```<br>x<br>```', noBlocks), '```<br>x<br>```');
 eq('fence entoure de texte', blockHtml('avant<br>```<br>code<br>```<br>apres'),
   'avant<br><pre class="redmark redmark-pre"><code>code</code></pre>apres');

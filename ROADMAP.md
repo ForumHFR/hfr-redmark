@@ -26,9 +26,9 @@ excluant citations/code/signatures.
 - [x] Blocs de code multi-lignes ```` ``` ```` (fence) avec langue optionnelle
 - [x] Listes `- ` / `* ` / `+ ` / `1. ` (à puces et numérotées)
 - [x] Task lists `- [ ]` / `- [x]` (cases à cocher Unicode)
+- [x] Citations Markdown `> ` (distinctes des `[quote]` HFR)
 - [x] Détection conservatrice (contexte multi-lignes requis)
 - [ ] Titres `#`, `##`, `###` (rendus discrets, taille mesurée)
-- [ ] Citations Markdown `> ` (distinctes des `[quote]` HFR)
 - [ ] Règle horizontale `---`
 - [ ] Listes imbriquées (indentation)
 - [ ] Aperçu live dans la zone de réponse (textarea) avant envoi

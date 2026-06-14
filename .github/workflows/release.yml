@@ -1,0 +1,75 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Extract version
+        id: version
+        run: echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+
+      - name: Extract changelog and generate BBCode
+        id: bbcode
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+
+          # Extraire la section de la version depuis CHANGELOG.md
+          # On prend tout entre "## VERSION" et le prochain "## " (exclus)
+          CHANGELOG=$(sed -n "/^## ${VERSION}/,/^## /p" CHANGELOG.md | sed '1d;$d')
+
+          echo "--- Changelog extrait ---"
+          echo "$CHANGELOG"
+          echo "--- Fin ---"
+
+          # Detecter si c'est une grosse release (plusieurs sous-sections ###)
+          SECTION_COUNT=$(echo "$CHANGELOG" | grep -c "^### " || true)
+
+          # Header commun
+          HEADER="[:peronnelle] [b][url=https://github.com/ForumHFR/hfr-redmark]RedMark[/url] v${VERSION}[/b]"
+          FOOTER="[:pow-wow] [url=https://github.com/ForumHFR/hfr-redmark/raw/refs/heads/master/hfr-redmark.user.js]Installer / mettre à jour[/url]"
+
+          if [ "$SECTION_COUNT" -gt 1 ]; then
+            # Format C : convertir ### en [b]...[/b], items en [*]
+            BODY=$(echo "$CHANGELOG" | sed 's/^### \(.*\)/\n[b]\1[\/b]/' | sed 's/^- /[*] /' | grep -v '^$' || true)
+          else
+            # Format A : juste les items en [*]
+            BODY=$(echo "$CHANGELOG" | grep "^- " | sed 's/^- /[*] /' || true)
+          fi
+
+          BBCODE=$(printf '%s\n\n%s\n\n%s' "$HEADER" "$BODY" "$FOOTER")
+
+          # Sauvegarder en multi-line output
+          {
+            echo "bbcode<<ENDOFBBCODE"
+            echo "$BBCODE"
+            echo "ENDOFBBCODE"
+          } >> "$GITHUB_OUTPUT"
+
+          # Afficher dans le summary
+          {
+            echo "## BBCode pour HFR"
+            echo ""
+            echo '```'
+            echo "$BBCODE"
+            echo '```'
+            echo ""
+            echo "Copier le contenu ci-dessus et le coller sur le topic HFR."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          body: |
+            BBCode prêt à copier-coller sur HFR :
+
+            ```
+            ${{ steps.bbcode.outputs.bbcode }}
+            ```
